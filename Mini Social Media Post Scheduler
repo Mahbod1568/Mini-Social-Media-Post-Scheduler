@@ -1,0 +1,81 @@
+import tkinter as tk
+from tkinter import messagebox
+import sqlite3
+from datetime import datetime, timedelta
+import time
+import threading
+
+# Database setup
+conn = sqlite3.connect("scheduled_posts.db")
+cursor = conn.cursor()
+cursor.execute('''CREATE TABLE IF NOT EXISTS posts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    post_time TEXT NOT NULL)''')
+conn.commit()
+
+# Function to schedule posts
+def schedule_post():
+    title = title_entry.get()
+    content = content_text.get("1.0", tk.END).strip()
+    hours = int(hours_entry.get())
+    minutes = int(minutes_entry.get())
+
+    if title and content:
+        post_time = datetime.now() + timedelta(hours=hours, minutes=minutes)
+        cursor.execute("INSERT INTO posts (title, content, post_time) VALUES (?, ?, ?)", 
+                       (title, content, post_time.strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        messagebox.showinfo("Scheduled", f"Post scheduled for {post_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        title_entry.delete(0, tk.END)
+        content_text.delete("1.0", tk.END)
+        hours_entry.delete(0, tk.END)
+        minutes_entry.delete(0, tk.END)
+    else:
+        messagebox.showwarning("Input Error", "Title and content cannot be empty!")
+
+# Function to check and post scheduled posts
+def check_scheduled_posts():
+    while True:
+        cursor.execute("SELECT * FROM posts")
+        posts = cursor.fetchall()
+        for post in posts:
+            post_time = datetime.strptime(post[3], "%Y-%m-%d %H:%M:%S")
+            if post_time <= datetime.now():
+                print(f"Posting '{post[1]}' at {post_time.strftime('%Y-%m-%d %H:%M:%S')}:\n{post[2]}")
+                cursor.execute("DELETE FROM posts WHERE id = ?", (post[0],))
+                conn.commit()
+        time.sleep(60)
+
+# Tkinter GUI setup
+root = tk.Tk()
+root.title("Post Scheduler")
+root.geometry("400x400")
+
+# Title entry
+tk.Label(root, text="Post Title", font=("Arial", 12)).pack(pady=5)
+title_entry = tk.Entry(root, width=40)
+title_entry.pack(pady=5)
+
+# Content text
+tk.Label(root, text="Post Content", font=("Arial", 12)).pack(pady=5)
+content_text = tk.Text(root, width=40, height=6)
+content_text.pack(pady=5)
+
+# Scheduling time
+tk.Label(root, text="Schedule In (Hours and Minutes)", font=("Arial", 12)).pack(pady=5)
+hours_entry = tk.Entry(root, width=5)
+hours_entry.pack(side=tk.LEFT, padx=5)
+minutes_entry = tk.Entry(root, width=5)
+minutes_entry.pack(side=tk.LEFT, padx=5)
+
+# Schedule button
+schedule_button = tk.Button(root, text="Schedule Post", command=schedule_post, bg="blue", fg="white")
+schedule_button.pack(pady=20)
+
+# Run the scheduler in a separate thread
+scheduler_thread = threading.Thread(target=check_scheduled_posts, daemon=True)
+scheduler_thread.start()
+
+root.mainloop()
